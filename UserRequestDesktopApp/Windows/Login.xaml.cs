@@ -3,6 +3,7 @@ using System.Windows;
 using Newtonsoft.Json;
 using Cores.Dtos.UserInfo;
 using Microsoft.Extensions.DependencyInjection;
+using System.Net.Http.Json;
 
 namespace UserRequestApp
 {
