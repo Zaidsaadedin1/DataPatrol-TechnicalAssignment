@@ -1,0 +1,6 @@
+@DataPatrol_TechnicalAssignment_HostAddress = http://localhost:5238
+
+GET {{DataPatrol_TechnicalAssignment_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

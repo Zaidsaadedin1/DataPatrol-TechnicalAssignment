@@ -1,0 +1,37 @@
+﻿<nav class="navbar navbar-expand-lg navbar-light bg-light shadow-sm" style="width: 100vw;">
+    <div class="container-fluid">
+        <a class="navbar-brand d-flex align-items-center" href="/">
+            <img src="favicon.png" alt="Logo" width="40" height="40" class="me-2">
+        </a>
+
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
+            <ul class="navbar-nav gap-2">
+                <li class="nav-item">
+                    <NavLink class="nav-link d-flex align-items-center" href="Users" Match="NavLinkMatch.All">
+                        <i class="bi bi-people-fill me-1"></i> Users
+                    </NavLink>
+                </li>
+                <li class="nav-item">
+                    <NavLink class="nav-link d-flex align-items-center" href="UserRequest">
+                        <i class="bi bi-inbox-fill me-1"></i> User Request
+                    </NavLink>
+                </li>
+                <li class="nav-item">
+                    <NavLink class="nav-link d-flex align-items-center" href="UserGroups">
+                        <i class="bi bi-collection-fill me-1"></i> User Groups
+                    </NavLink>
+                </li>
+                <li class="nav-item">
+                    <NavLink class="nav-link d-flex align-items-center" href="PolicyList">
+                        <i class="bi bi-shield-lock-fill me-1"></i> Policy List
+                    </NavLink>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>

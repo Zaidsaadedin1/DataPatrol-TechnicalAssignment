@@ -1,0 +1,330 @@
+﻿@page "/users"
+@using Microsoft.JSInterop
+@using Cores.Dtos.UserInfo
+@using Cores.Interfaces
+@inject IUserInfosService UserService
+@inject NavigationManager NavManager
+@inject IJSRuntime JSRuntime
+
+<h3>Users Management</h3>
+
+@if (UsersInfo is null)
+{
+    <p>Loading users...</p>
+}
+else if (UsersInfo.Count == 0)
+{
+    <table class="table table-striped">
+        <tbody>
+            <tr>
+                <td colspan="8" class="text-center">No users found.</td>
+            </tr>
+        </tbody>
+    </table>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>UserId</th>
+                <th>Username</th>
+                <th>Enabled</th>
+                <th>Created At</th>
+                <th>Joined Groups</th>
+                <th>Request Count</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var user in UsersInfo)
+            {
+                <tr>
+                    <td>@user.UserId</td>
+                    <td>@user.Username</td>
+                    <td>@(user.IsEnabled ? "✅" : "❌")</td>
+                    <td>@user.CreatedDateTime.ToString("yyyy-MM-dd")</td>
+                    <td>@string.Join(", ", user.GroupsNames)</td>
+                    <td>
+                        @if (UserRequestCounts.ContainsKey(user.UserId))
+                        {
+                            <span class="badge bg-info">@UserRequestCounts[user.UserId]</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">Loading...</span>
+                        }
+                    </td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-danger btn-sm" @onclick="() => DeleteUser(user.UserId)">Delete</button>
+                            <button class="btn btn-warning btn-sm" @onclick="() => DisableUser(user.UserId)">Disable</button>
+                            <button class="btn btn-info btn-sm" @onclick="() => AssignGroups(user.UserId)">Assign Groups</button>
+                            <button class="btn btn-primary btn-sm" @onclick="() => ShowRequests(user.UserId)">View Requests</button>
+                            <button class="btn btn-success btn-sm" @onclick="() => ShowRequestsDetailed(user.UserId)">Request Details</button>
+                        </div>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (ShowRequestsModal)
+{
+    <div class="modal fade show" style="display: block;" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">User Requests Details - @SelectedUserId</h5>
+                    <button type="button" class="btn-close" @onclick="CloseRequestsModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (UserRequestsDetailed != null && UserRequestsDetailed.Any())
+                    {
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Request ID</th>
+                                    <th>Request Type</th>
+                                    <th>Status</th>
+                                    <th>Request Date</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var request in UserRequestsDetailed)
+                                {
+                                    <tr>
+                                        <td>@request.RequestId</td>
+                                        <td>@request.</td>
+                                        <td>
+                                            <span class="badge @GetStatusBadgeClass(request.Status)">
+                                                @GetStatusText(request.Status)
+                                            </span>
+                                        </td>
+                                        <td>@request.RequestDateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                                        <td>@request.Description</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <p class="text-muted">No requests found for this user.</p>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseRequestsModal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@if (ShowGroupAssignmentModal)
+{
+    <div class="modal fade show" style="display: block;" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Assign Groups - @SelectedUserId</h5>
+                    <button type="button" class="btn-close" @onclick="CloseGroupAssignmentModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Select Groups:</label>
+                        @if (AvailableGroups != null)
+                        {
+                            @foreach (var group in AvailableGroups)
+                            {
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox"
+                                           value="@group.Name"
+                                           checked="@SelectedGroupIds.Contains(group.GroupId)"
+                                           @onchange="@(() => ToggleGroupSelection(group.GroupId))" />
+                                    <label class="form-check-label">
+                                        @group.Name
+                                    </label>
+                                </div>
+                            }
+                        }
+                    </div>
+                    <p class="text-muted">Selected: @SelectedGroupIds.Count group(s)</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseGroupAssignmentModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="SaveGroupAssignment">Save Assignment</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    private List<UserInfoDto>? UsersInfo;
+    private Dictionary<string, int> UserRequestCounts = new();
+    private List<UserRequestDto>? UserRequestsDetailed;
+    private bool ShowRequestsModal = false;
+    private bool ShowGroupAssignmentModal = false;
+    private string SelectedUserId = string.Empty;
+    private List<string> SelectedGroupIds = new();
+    private List<UserGroupDto> AvailableGroups = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsersAsync();
+        await LoadUserRequestCountsAsync();
+        await LoadAvailableGroupsAsync();
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        UsersInfo = await UserService.GetAllUsersAsync();
+    }
+
+    private async Task LoadUserRequestCountsAsync()
+    {
+        if (UsersInfo != null)
+        {
+            UserRequestCounts.Clear();
+            foreach (var user in UsersInfo)
+            {
+                var count = await UserService.GetUserRequestsAsync(user.UserId);
+                UserRequestCounts[user.UserId] = count;
+            }
+        }
+    }
+
+    private async Task LoadAvailableGroupsAsync()
+    {
+        AvailableGroups = await UserService.GetAllGroupsAsync();
+    }
+
+    private async Task DeleteUser(string userId)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to delete user {userId}?");
+        if (confirmed)
+        {
+            try
+            {
+                await UserService.DeleteUserAsync(userId);
+                await LoadUsersAsync();
+                await LoadUserRequestCountsAsync();
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Error deleting user: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task DisableUser(string userId)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to disable user {userId}?");
+        if (confirmed)
+        {
+            try
+            {
+                await UserService.DisableUserAsync(userId);
+                await LoadUsersAsync();
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Error disabling user: {ex.Message}");
+            }
+        }
+    }
+
+    private void AssignGroups(string userId)
+    {
+        SelectedUserId = userId;
+        SelectedGroupIds.Clear();
+
+        var user = UsersInfo?.FirstOrDefault(u => u.UserId == userId);
+        if (user != null && user.GroupsNames != null)
+        {
+            var matched = AvailableGroups
+                .Where(g => user.GroupsNames.Contains(g.Name))
+                .Select(g => g.GroupId)
+                .ToList();
+
+            SelectedGroupIds.AddRange(matched);
+        }
+
+        ShowGroupAssignmentModal = true;
+    }
+
+    private async Task SaveGroupAssignment()
+    {
+        try
+        {
+            await UserService.AssignGroupsAsync(SelectedUserId, SelectedGroupIds);
+            await LoadUsersAsync();
+            CloseGroupAssignmentModal();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error assigning groups: {ex.Message}");
+        }
+    }
+
+    private void CloseGroupAssignmentModal()
+    {
+        ShowGroupAssignmentModal = false;
+        SelectedUserId = string.Empty;
+        SelectedGroupIds.Clear();
+    }
+
+    private void ToggleGroupSelection(string groupId)
+    {
+        if (SelectedGroupIds.Contains(groupId))
+            SelectedGroupIds.Remove(groupId);
+        else
+            SelectedGroupIds.Add(groupId);
+    }
+
+    private void ShowRequests(string userId)
+    {
+        NavManager.NavigateTo($"/requests?userId={userId}");
+    }
+
+    private async Task ShowRequestsDetailed(string userId)
+    {
+        SelectedUserId = userId;
+        UserRequestsDetailed = await UserService.GetUserRequestsDetailedAsync(userId);
+        ShowRequestsModal = true;
+    }
+
+    private void CloseRequestsModal()
+    {
+        ShowRequestsModal = false;
+        SelectedUserId = string.Empty;
+        UserRequestsDetailed = null;
+    }
+
+    private string GetStatusBadgeClass(int status)
+    {
+        return status switch
+        {
+            0 => "bg-warning",
+            1 => "bg-success",
+            2 => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetStatusText(int status)
+    {
+        return status switch
+        {
+            0 => "Pending",
+            1 => "Approved",
+            2 => "Rejected",
+            _ => "Unknown"
+        };
+    }
+}

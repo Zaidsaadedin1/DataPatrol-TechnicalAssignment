@@ -1,0 +1,22 @@
+﻿<Window x:Class="UserRequestApp.SummaryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Request Summary" Height="300" Width="400">
+    <Grid Margin="20">
+        <StackPanel>
+            <TextBlock Text="Request Summary" FontSize="16" FontWeight="Bold"/>
+            <TextBlock Text="{Binding UserId}" Margin="0,10,0,10"/>
+
+            <ListView ItemsSource="{Binding StatusCounts}">
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="Status" DisplayMemberBinding="{Binding Key}" Width="150"/>
+                        <GridViewColumn Header="Count" DisplayMemberBinding="{Binding Value}" Width="100"/>
+                    </GridView>
+                </ListView.View>
+            </ListView>
+
+            <Button Content="Back" Margin="0,20,0,0" Height="30" Click="BtnBack_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

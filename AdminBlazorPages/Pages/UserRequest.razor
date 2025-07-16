@@ -1,0 +1,260 @@
+﻿@page "/UserRequest"
+@using Microsoft.JSInterop
+@using Cores.Dtos.UserRequests
+@using Cores.Interfaces
+@inject IUserRequestService UserRequestService
+@inject NavigationManager NavManager
+@inject IJSRuntime JSRuntime
+
+<h3>User Requests Management</h3>
+
+<div class="mb-3">
+    <button class="btn btn-primary" @onclick="ShowCreateModal">
+        <i class="fas fa-plus"></i> Create New Request
+    </button>
+</div>
+
+@if (UserRequests is null)
+{
+    <p>Loading user requests...</p>
+}
+else if (UserRequests.Count == 0)
+{
+    <table class="table table-striped">
+        <tbody>
+            <tr>
+                <td colspan="7" class="text-center">No user requests found.</td>
+            </tr>
+        </tbody>
+    </table>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Request ID</th>
+                <th>Requested By</th>
+                <th>Request Type</th>
+                <th>Status</th>
+                <th>Request Date</th>
+                <th>Description</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var request in UserRequests)
+            {
+                <tr>
+                    <td>@request.RequestId</td>
+                    <td>@request.RequestedBy</td>
+                    <td>@request.RequestCode</td>
+                    <td>
+                        <span class="badge @GetStatusBadgeClass(request.Status)">
+                            @GetStatusText(request.Status)
+                        </span>
+                    </td>
+                    <td>@request.RequestDateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>@request.Description</td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-info btn-sm" @onclick="() => ShowEditModal(request)">Edit</button>
+                            <button class="btn btn-danger btn-sm" @onclick="() => DeleteRequest(request.RequestId)">Delete</button>
+                        </div>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (ShowCreateRequestModal)
+{
+    <div class="modal fade show" style="display: block;" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create New Request</h5>
+                    <button type="button" class="btn-close" @onclick="CloseCreateModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Requested By (User ID):</label>
+                        <input type="text" class="form-control" @bind="NewRequest.RequestedBy" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Request Type:</label>
+                        <input type="text" class="form-control" @bind="NewRequest.RequestType" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description:</label>
+                        <textarea class="form-control" rows="3" @bind="NewRequest.Description"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseCreateModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="CreateRequest">Create Request</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@if (ShowEditRequestModal)
+{
+    <div class="modal fade show" style="display: block;" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Request - @EditRequest.RequestId</h5>
+                    <button type="button" class="btn-close" @onclick="CloseEditModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Request Type:</label>
+                        <input type="text" class="form-control" @bind="EditRequest.RequestType" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Status:</label>
+                        <select class="form-select" @bind="EditRequest.Status">
+                            <option value="0">Pending</option>
+                            <option value="1">Approved</option>
+                            <option value="2">Rejected</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description:</label>
+                        <textarea class="form-control" rows="3" @bind="EditRequest.Description"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseEditModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="UpdateRequest">Update Request</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    private List<UserRequestResponseDto>? UserRequests;
+    private bool ShowCreateRequestModal = false;
+    private bool ShowEditRequestModal = false;
+    private UserRequestCreateDto NewRequest = new();
+    private UserRequestUpdateDto EditRequest = new();
+    private long EditRequestId = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserRequestsAsync();
+    }
+
+    private async Task LoadUserRequestsAsync()
+    {
+        var requests = await UserRequestService.GetAllUserRequests();
+        UserRequests = requests.ToList();
+    }
+
+    private void ShowCreateModal()
+    {
+        NewRequest = new UserRequestCreateDto();
+        ShowCreateRequestModal = true;
+    }
+
+    private void CloseCreateModal()
+    {
+        ShowCreateRequestModal = false;
+        NewRequest = new UserRequestCreateDto();
+    }
+
+    private async Task CreateRequest()
+    {
+        try
+        {
+            await UserRequestService.CreateUserRequest(NewRequest);
+            await LoadUserRequestsAsync();
+            CloseCreateModal();
+            await JSRuntime.InvokeVoidAsync("alert", "Request created successfully!");
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error creating request: {ex.Message}");
+        }
+    }
+
+    private void ShowEditModal(UserRequestResponseDto request)
+    {
+        EditRequestId = request.RequestId;
+        EditRequest = new UserRequestUpdateDto
+        {
+            RequestCode = request.RequestCode,
+            Status = request.Status,
+            Description = request.Description
+        };
+        ShowEditRequestModal = true;
+    }
+
+    private void CloseEditModal()
+    {
+        ShowEditRequestModal = false;
+        EditRequest = new UserRequestUpdateDto();
+        EditRequestId = 0;
+    }
+
+    private async Task UpdateRequest()
+    {
+        try
+        {
+            await UserRequestService.EditUserRequest(EditRequestId, EditRequest);
+            await LoadUserRequestsAsync();
+            CloseEditModal();
+            await JSRuntime.InvokeVoidAsync("alert", "Request updated successfully!");
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error updating request: {ex.Message}");
+        }
+    }
+
+    private async Task DeleteRequest(long requestId)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to delete request {requestId}?");
+        if (confirmed)
+        {
+            try
+            {
+                await UserRequestService.DeleteUserRequest(requestId);
+                await LoadUserRequestsAsync();
+                await JSRuntime.InvokeVoidAsync("alert", "Request deleted successfully!");
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Error deleting request: {ex.Message}");
+            }
+        }
+    }
+
+    private string GetStatusBadgeClass(int status)
+    {
+        return status switch
+        {
+            0 => "bg-warning",
+            1 => "bg-success",
+            2 => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetStatusText(int status)
+    {
+        return status switch
+        {
+            0 => "Pending",
+            1 => "Approved",
+            2 => "Rejected",
+            _ => "Unknown"
+        };
+    }
+}

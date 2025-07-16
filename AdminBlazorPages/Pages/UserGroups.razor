@@ -1,0 +1,357 @@
+﻿@page "/UserGroups"
+@using System.Linq
+@using Microsoft.JSInterop
+@using Cores.Dtos.UserGroups
+@using Cores.Dtos.UserInfo
+@using Cores.Dtos.Policies
+@using Cores.Interfaces
+@inject IUserGroupService UserGroupService
+@inject IUserInfosService UserInfosService
+@inject IPolicyService PolicyService
+@inject IJSRuntime JSRuntime
+
+<h3>User Groups Management</h3>
+
+<div class="mb-3">
+    <button class="btn btn-primary" @onclick="ShowCreateModal">Create New Group</button>
+</div>
+
+@if (userGroups == null)
+{
+    <p>Loading user groups...</p>
+}
+else if (!userGroups.Any())
+{
+    <div class="alert alert-info">No user groups found.</div>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Group ID</th>
+                <th>Group Name</th>
+                <th>Description</th>
+                <th>Users Count</th>
+                <th>Policies Count</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var group in userGroups)
+            {
+                <tr>
+                    <td>@group.GroupId</td>
+                    <td>@group.Name</td>
+                    <td>@group.Description</td>
+                    <td>
+                        <span class="badge bg-info">@(group.UserIds?.Count() ?? 0)</span>
+                    </td>
+                    <td>
+                        <span class="badge bg-warning">@(group.PolicyIds?.Count() ?? 0)</span>
+                    </td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-info btn-sm" @onclick="() => ShowEditModal(group)">Edit</button>
+                            <button class="btn btn-success btn-sm" @onclick="() => ShowAssignUsersModalAction(group.GroupId)">Assign Users</button>
+                            <button class="btn btn-warning btn-sm" @onclick="() => ShowAssignPoliciesModalAction(group.GroupId)">Assign Policies</button>
+                            <button class="btn btn-danger btn-sm" @onclick="() => DeleteGroup(group.GroupId)">Delete</button>
+                        </div>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (ShowGroupModal)
+{
+    <div class="modal fade show" style="display: block;" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(IsEditMode ? "Edit Group" : "Create Group")</h5>
+                    <button type="button" class="btn-close" @onclick="CloseGroupModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Group Name</label>
+                        <input type="text" class="form-control" @bind="GroupForm.Name" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" rows="3" @bind="GroupForm.Description"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseGroupModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="SaveGroup">
+                        @(IsEditMode ? "Update" : "Create")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@if (ShowAssignUsersModalFlag)
+{
+    <div class="modal fade show" style="display: block;" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Assign Users to Group</h5>
+                    <button type="button" class="btn-close" @onclick="CloseAssignUsersModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Select Users:</label>
+                        @if (AvailableUsers != null)
+                        {
+                            @foreach (var user in AvailableUsers)
+                            {
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox"
+                                           checked="@SelectedUserIds.Contains(user.UserId)"
+                                           @onchange="@(() => ToggleUserSelection(user.UserId))" />
+                                    <label class="form-check-label">
+                                        @user.Username (@user.UserId)
+                                    </label>
+                                </div>
+                            }
+                        }
+                    </div>
+                    <p class="text-muted">Selected: @SelectedUserIds.Count user(s)</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseAssignUsersModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="SaveUserAssignment">Save Assignment</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@if (ShowAssignPoliciesModalFlag)
+{
+    <div class="modal fade show" style="display: block;" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Assign Policies to Group</h5>
+                    <button type="button" class="btn-close" @onclick="CloseAssignPoliciesModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Select Policies:</label>
+                        @if (AvailablePolicies != null)
+                        {
+                            @foreach (var policy in AvailablePolicies)
+                            {
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox"
+                                           checked="@SelectedPolicyIds.Contains(policy.PolicyId)"
+                                           @onchange="@(() => TogglePolicySelection(policy.PolicyId))" />
+                                    <label class="form-check-label">
+                                        @policy.PolicyName
+                                    </label>
+                                </div>
+                            }
+                        }
+                    </div>
+                    <p class="text-muted">Selected: @SelectedPolicyIds.Count policy(ies)</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseAssignPoliciesModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="SavePolicyAssignment">Save Assignment</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    private IEnumerable<UserGroupResponseDto>? userGroups;
+    private IEnumerable<UserInfoDto>? AvailableUsers;
+    private IEnumerable<PolicyResponseDto>? AvailablePolicies;
+
+    private bool ShowGroupModal = false;
+    private bool ShowAssignUsersModalFlag = false;
+    private bool ShowAssignPoliciesModalFlag = false;
+    private bool IsEditMode = false;
+
+    private string SelectedGroupId = string.Empty;
+    private List<string> SelectedUserIds = new();
+    private List<string> SelectedPolicyIds = new();
+    private UserGroupCreateDto GroupForm = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserGroupsAsync();
+        await LoadAvailableUsersAsync();
+        await LoadAvailablePoliciesAsync();
+    }
+
+    private async Task LoadUserGroupsAsync()
+    {
+        userGroups = await UserGroupService.GetAllUserGroups();
+    }
+
+    private async Task LoadAvailableUsersAsync()
+    {
+        AvailableUsers = await UserInfosService.GetAllUsersAsync();
+    }
+
+    private async Task LoadAvailablePoliciesAsync()
+    {
+        AvailablePolicies = await PolicyService.GetAllPolicies();
+    }
+
+    private void ShowCreateModal()
+    {
+        Console.WriteLine("ShowCreateModal called"); 
+        IsEditMode = false;
+        GroupForm = new UserGroupCreateDto();
+        ShowGroupModal = true;
+        StateHasChanged();
+    }
+
+    private void ShowEditModal(UserGroupResponseDto group)
+    {
+        IsEditMode = true;
+        SelectedGroupId = group.GroupId;
+        GroupForm = new UserGroupCreateDto
+        {
+            Name = group.Name,
+            Description = group.Description
+        };
+        ShowGroupModal = true;
+    }
+
+    private async Task SaveGroup()
+    {
+        if (IsEditMode)
+        {
+            var updateDto = new UserGroupUpdateDto
+            {
+                Name = GroupForm.Name,
+                Description = GroupForm.Description
+            };
+            await UserGroupService.EditUserGroup(SelectedGroupId, updateDto);
+        }
+        else
+        {
+            await UserGroupService.CreateUserGroup(GroupForm);
+        }
+
+        await LoadUserGroupsAsync();
+        CloseGroupModal();
+
+    }
+
+    private void CloseGroupModal()
+    {
+        ShowGroupModal = false;
+        IsEditMode = false;
+        SelectedGroupId = string.Empty;
+        GroupForm = new UserGroupCreateDto();
+    }
+
+    private async Task DeleteGroup(string groupId)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this group?");
+        if (confirmed)
+        {
+            await UserGroupService.DeleteUserGroup(groupId);
+            await LoadUserGroupsAsync();
+        }
+    }
+
+    private void ShowAssignUsersModalAction(string groupId)
+    {
+        SelectedGroupId = groupId;
+        SelectedUserIds.Clear();
+
+        var group = userGroups?.FirstOrDefault(g => g.GroupId == groupId);
+        if (group?.UserIds != null)
+        {
+            SelectedUserIds.AddRange(group.UserIds);
+        }
+
+        ShowAssignUsersModalFlag = true;
+    }
+
+    private void CloseAssignUsersModal()
+    {
+        ShowAssignUsersModalFlag = false;
+        SelectedGroupId = string.Empty;
+        SelectedUserIds.Clear();
+    }
+
+    private void ToggleUserSelection(string userId)
+    {
+        if (SelectedUserIds.Contains(userId))
+            SelectedUserIds.Remove(userId);
+        else
+            SelectedUserIds.Add(userId);
+    }
+
+    private async Task SaveUserAssignment()
+    {
+
+        var assignDto = new AssignUsersToGroupDto
+        {
+            GroupId = SelectedGroupId,
+            UserIds = SelectedUserIds
+        };
+        await UserGroupService.AssignUsersToGroup(assignDto);
+        await LoadUserGroupsAsync();
+
+
+    }
+
+    private void ShowAssignPoliciesModalAction(string groupId)
+    {
+        SelectedGroupId = groupId;
+        SelectedPolicyIds.Clear();
+
+        var group = userGroups?.FirstOrDefault(g => g.GroupId == groupId);
+        if (group?.PolicyIds != null)
+        {
+            SelectedPolicyIds.AddRange(group.PolicyIds);
+        }
+
+        ShowAssignPoliciesModalFlag = true;
+    }
+
+    private void CloseAssignPoliciesModal()
+    {
+        ShowAssignPoliciesModalFlag = false;
+        SelectedGroupId = string.Empty;
+        SelectedPolicyIds.Clear();
+    }
+
+    private void TogglePolicySelection(string policyId)
+    {
+        if (SelectedPolicyIds.Contains(policyId))
+            SelectedPolicyIds.Remove(policyId);
+        else
+            SelectedPolicyIds.Add(policyId);
+    }
+
+    private async Task SavePolicyAssignment()
+    {
+
+        var assignDto = new AssignPoliciesToGroupDto
+        {
+            GroupId = SelectedGroupId,
+            PolicyIds = SelectedPolicyIds
+        };
+        await UserGroupService.AssignPoliciesToGroup(assignDto);
+        await LoadUserGroupsAsync();
+        CloseAssignPoliciesModal();
+    }
+}

@@ -1,0 +1,326 @@
+﻿@page "/PolicyList"
+@using Microsoft.JSInterop
+@using Cores.Dtos.Policies
+@using Cores.Dtos.UserGroups
+@using Cores.Interfaces
+@inject IPolicyService PolicyService
+@inject IUserGroupService UserGroupService
+@inject IJSRuntime JSRuntime
+
+<h3>Policies Management</h3>
+
+<div class="mb-3">
+    <button class="btn btn-primary" @onclick="ShowCreateModal">Create New Policy</button>
+</div>
+
+@if (Policies is null)
+{
+    <p>Loading policies...</p>
+}
+else if (!Policies.Any())
+{
+    <div class="alert alert-info">No policies found.</div>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Policy ID</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Default</th>
+                <th>Enabled</th>
+                <th>Created Date</th>
+                <th>Assigned Groups</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var policy in Policies)
+            {
+                <tr>
+                    <td>@policy.PolicyId</td>
+                    <td>@policy.PolicyName</td>
+                    <td>@policy.PolicyType</td>
+                    <td>
+                        <span class="badge @(policy.IsDefault ? "bg-success" : "bg-secondary")">
+                            @(policy.IsDefault ? "Yes" : "No")
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge @(policy.IsEnabled ? "bg-success" : "bg-danger")">
+                            @(policy.IsEnabled ? "Enabled" : "Disabled")
+                        </span>
+                    </td>
+                    <td>@policy.CreatedDateTime.ToString("yyyy-MM-dd")</td>
+                    <td>
+                        @if (policy.GroupIds != null && policy.GroupIds.Any())
+                        {
+                            @string.Join(", ", policy.GroupIds)
+                        }
+                        else
+                        {
+                            <span class="text-muted">No groups assigned</span>
+                        }
+                    </td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-info btn-sm" @onclick="() => ShowEditModal(policy)">Edit</button>
+                            <button class="btn btn-warning btn-sm" @onclick="() => ShowAssignGroupsModal(policy.PolicyId)">Assign Groups</button>
+                            <button class="btn btn-danger btn-sm" @onclick="() => DeletePolicy(policy.PolicyId)">Delete</button>
+                        </div>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (ShowPolicyModal)
+{
+    <div class="modal fade show" style="display: block;" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(IsEditMode ? "Edit Policy" : "Create Policy")</h5>
+                    <button type="button" class="btn-close" @onclick="ClosePolicyModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Policy ID</label>
+                        <input type="text" class="form-control" @bind="PolicyForm.PolicyId" disabled="@IsEditMode" />
+                        @if (!IsEditMode)
+                        {
+                            <div class="form-text">Maximum 30 characters</div>
+                        }
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Policy Name</label>
+                        <input type="text" class="form-control" @bind="PolicyForm.PolicyName" />
+                        <div class="form-text">Maximum 200 characters</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Policy Type</label>
+                        <input type="number" class="form-control" @bind="PolicyForm.PolicyType" />
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" @bind="PolicyForm.IsDefault" />
+                            <label class="form-check-label">
+                                Is Default Policy
+                            </label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" @bind="PolicyForm.IsEnabled" />
+                            <label class="form-check-label">
+                                Is Enabled
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="ClosePolicyModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="SavePolicy">
+                        @(IsEditMode ? "Update" : "Create")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@if (ShowAssignGroupsModalFlag)
+{
+    <div class="modal fade show" style="display: block;" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Assign Groups to Policy</h5>
+                    <button type="button" class="btn-close" @onclick="CloseAssignGroupsModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Select Groups:</label>
+                        @if (AvailableGroups != null)
+                        {
+                            @foreach (var group in AvailableGroups)
+                            {
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox"
+                                           checked="@SelectedGroupIds.Contains(group.GroupId)"
+                                           @onchange="@((ChangeEventArgs e) => ToggleGroupSelection(group.GroupId, (bool)e.Value!))" />
+                                    <label class="form-check-label">
+                                        @group.Name
+                                    </label>
+                                </div>
+                            }
+                        }
+                    </div>
+                    <p class="text-muted">Selected: @SelectedGroupIds.Count group(s)</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseAssignGroupsModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="SaveGroupAssignment">Save Assignment</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    private IEnumerable<PolicyResponseDto>? Policies;
+    private IEnumerable<UserGroupResponseDto>? AvailableGroups;
+    private bool ShowPolicyModal = false;
+    private bool ShowAssignGroupsModalFlag = false;
+    private bool IsEditMode = false;
+    private string SelectedPolicyId = string.Empty;
+    private List<string> SelectedGroupIds = new();
+    private PolicyFormDto PolicyForm = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPoliciesAsync();
+        await LoadAvailableGroupsAsync();
+    }
+
+    private async Task LoadPoliciesAsync()
+    {
+        Policies = await PolicyService.GetAllPolicies();
+    }
+
+    private async Task LoadAvailableGroupsAsync()
+    {
+        AvailableGroups = await UserGroupService.GetAllUserGroups();
+    }
+
+    private void ShowCreateModal()
+    {
+        IsEditMode = false;
+        PolicyForm = new PolicyFormDto
+        {
+            IsEnabled = true
+        };
+        ShowPolicyModal = true;
+    }
+
+    private void ShowEditModal(PolicyResponseDto policy)
+    {
+        IsEditMode = true;
+        SelectedPolicyId = policy.PolicyId;
+        PolicyForm = new PolicyFormDto
+        {
+            PolicyId = policy.PolicyId,
+            PolicyName = policy.PolicyName,
+            PolicyType = policy.PolicyType,
+            IsDefault = policy.IsDefault,
+            IsEnabled = policy.IsEnabled
+        };
+        ShowPolicyModal = true;
+    }
+
+    private async Task SavePolicy()
+    {
+
+        if (IsEditMode)
+        {
+            var updateDto = new PolicyUpdateDto
+            {
+                PolicyName = PolicyForm.PolicyName,
+                PolicyType = PolicyForm.PolicyType,
+                IsDefault = PolicyForm.IsDefault,
+                IsEnabled = PolicyForm.IsEnabled
+            };
+            await PolicyService.EditPolicy(SelectedPolicyId, updateDto);
+        }
+        else
+        {
+            var createDto = new PolicyCreateDto
+            {
+                PolicyId = PolicyForm.PolicyId,
+                PolicyName = PolicyForm.PolicyName,
+                PolicyType = PolicyForm.PolicyType,
+                IsDefault = PolicyForm.IsDefault,
+                IsEnabled = PolicyForm.IsEnabled
+            };
+            await PolicyService.CreatePolicy(createDto);
+        }
+
+        await LoadPoliciesAsync();
+        ClosePolicyModal();
+
+    }
+
+    private void ClosePolicyModal()
+    {
+        ShowPolicyModal = false;
+        IsEditMode = false;
+        SelectedPolicyId = string.Empty;
+        PolicyForm = new PolicyFormDto();
+    }
+
+    private async Task DeletePolicy(string policyId)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this policy?");
+        if (confirmed)
+        {
+
+            await PolicyService.DeletePolicy(policyId);
+            await LoadPoliciesAsync();
+
+        }
+    }
+
+    private void ShowAssignGroupsModal(string policyId)
+    {
+        SelectedPolicyId = policyId;
+        SelectedGroupIds.Clear();
+
+        var policy = Policies?.FirstOrDefault(p => p.PolicyId == policyId);
+        if (policy?.GroupIds != null)
+        {
+            SelectedGroupIds.AddRange(policy.GroupIds);
+        }
+
+        ShowAssignGroupsModalFlag = true;
+    }
+
+    private void CloseAssignGroupsModal()
+    {
+        ShowAssignGroupsModalFlag = false;
+        SelectedPolicyId = string.Empty;
+        SelectedGroupIds.Clear();
+    }
+
+    private void ToggleGroupSelection(string groupId, bool isSelected)
+    {
+        if (isSelected)
+        {
+            if (!SelectedGroupIds.Contains(groupId))
+                SelectedGroupIds.Add(groupId);
+        }
+        else
+        {
+            SelectedGroupIds.Remove(groupId);
+        }
+    }
+
+    private async Task SaveGroupAssignment()
+    {
+
+        var assignDto = new AssignPolicyToGroupsDto
+        {
+            PolicyId = SelectedPolicyId,
+            GroupIds = SelectedGroupIds
+        };
+        await PolicyService.AssignPolicyToGroups(assignDto);
+        await LoadPoliciesAsync();
+        CloseAssignGroupsModal();
+
+    }
+
+}
